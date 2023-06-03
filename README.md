@@ -1,19 +1,13 @@
-# TK1 LED blinking demo app
+> ⚠️ this app is WiP and nonfunctional! ⚠️
 
-This repository contains a demo application to run on the TKey USB
-security stick ("device app"), as well as companion client app 
+# TK1 OATH/OTP app
+
+This repository will contain an application to run on the TKey 
+USB security stick ("device app"), as well as companion client app 
 ("client app") running on the host computer. The client app loads
-a user-provided Morse code sequence, according to which the device 
-application will blink the LED on the TKey. 
-
-This repo has two goals:
-* to demonstrate communication between the device app and the 
-client app,
-* to provide a template for a monorepo including device app & 
-client app, with shared definitions. 
-
-Most of the code here, including the build system, comes from 
-[Tillitis](github.com/tillitis/tillitis-key1-apps/)' own app repo. 
+a OTP archive, encrypted using device secrets (thus tying the OTP 
+codes to the key, as is the security model for 2FA) to the key, 
+which will generate the OTP codes. 
 
 ## Building
 We recommend building the device app using Podman, and the client app
