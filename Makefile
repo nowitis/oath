@@ -1,8 +1,9 @@
-CLIENTAPP = runpattern
+CLIENTAPP = oath
 OBJCOPY ?= llvm-objcopy
 
 P := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 LIBDIR ?= $(P)/../tkey-libs
+LIBCRYPTO_DIR ?= $(P)/../tkey-crypto
 
 CC = clang
 
@@ -14,19 +15,21 @@ CFLAGS = -target riscv32-unknown-none-elf -march=rv32iczmmul -mabi=ilp32 -mcmode
    -static -std=gnu99 -O2 -ffast-math -fno-common -fno-builtin-printf \
    -fno-builtin-putchar -nostdlib -mno-relax -flto -g \
    -Wall -Werror=implicit-function-declaration \
-   -I $(INCLUDE) -I $(LIBDIR)  \
+   -I $(INCLUDE) -I $(LIBDIR) -I $(LIBCRYPTO_DIR)/include \
    -DNODEBUG
 
 AS = clang
 ASFLAGS = -target riscv32-unknown-none-elf -march=rv32iczmmul -mabi=ilp32 -mcmodel=medany -mno-relax
 
-LDFLAGS=-T $(LIBDIR)/app.lds -L $(LIBDIR)/libcommon/ -lcommon -L $(LIBDIR)/libcrt0/ -lcrt0
+LDFLAGS=-T $(LIBDIR)/app.lds -L $(LIBDIR)/libcommon/ -lcommon -L $(LIBDIR)/libcrt0/ -lcrt0 \
+	-L $(LIBCRYPTO_DIR)/libarithmetic/ -larithmetic -L $(LIBCRYPTO_DIR)/libsha/ -lsha
 
 RM=/bin/rm
 
 
 .PHONY: all
 all: deviceapp client
+both: podman-deviceapp client
 
 deviceapp: app/app.bin
 client: $(CLIENTAPP)
@@ -39,15 +42,16 @@ client: $(CLIENTAPP)
 show-%-hash: %/app.bin
 	cd $$(dirname $^) && sha512sum app.bin
 
-APP_OBJS = app/main.o app/app_proto.o app/blink.o
-app/app.elf: $(LIBS) $(APP_OBJS)
-	$(CC) $(CFLAGS) $(APP_OBJS) $(LDFLAGS) -o $@
-$(APP_OBJS): $(INCLUDE)/tk1_mem.h app/app_proto.h app/blink.h
+APP_OBJS = app/main.o app/app_proto.o app/assert.o app/system.o app/helpers.o app/oath/oath.o
+app/app.elf: $(LIBS) $(CRYPTOLIBS) $(APP_OBJS)
+	$(CC) $(CFLAGS) $(APP_OBJS) $(LDFLAGS) -L $(LIBDIR)/monocypher -lmonocypher -L app/lib -lsha -o $@
+$(APP_OBJS): $(INCLUDE)/tk1_mem.h app/app_proto.h app/assert.h app/helpers.h app/oath/oath.h
 
 .PHONY: clean
 clean:
-	$(RM) -f app/app.bin app/app.elf app/main.o
-	$(RM) -f runpattern cmd/app.bin
+	$(RM) -f app/oath/*.o
+	$(RM) -f app/app.bin app/app.elf app/*.o
+	$(RM) -f $(CLIENTAPP) cmd/app.bin
 
 # Uses ../.clang-format
 FMTFILES=app/*.[ch]
@@ -61,7 +65,7 @@ checkfmt:
 	clang-format --dry-run --ferror-limit=0 --Werror $(FMTFILES)
 
 podman-deviceapp:
-	podman run --rm --mount type=bind,source=$(CURDIR),target=/src --mount type=bind,source=$(CURDIR)/../tkey-libs,target=/tkey-libs -w /src -it ghcr.io/tillitis/tkey-builder:2 make -j deviceapp
+	podman run --rm --mount type=bind,source=$(CURDIR),target=/src --mount type=bind,source=$(CURDIR)/../tkey-libs,target=/tkey-libs --mount type=bind,source=$(CURDIR)/../tkey-crypto,target=/tkey-crypto -w /src -it ghcr.io/tillitis/tkey-builder:2 make -j deviceapp
 
 # .PHONY to let go-build handle deps and rebuilds
 .PHONY: $(CLIENTAPP)
